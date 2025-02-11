@@ -1,0 +1,41 @@
+FROM ros:humble-perception
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    python3-opencv \
+    python3-pip \
+    python3-cv-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip install opencv-python
+
+RUN pip install mediapipe
+
+
+RUN apt-get update && apt-get install -y ros-humble-vision-msgs
+
+# Add custom ROS2 message interfaces
+WORKDIR /ws
+COPY vision_interfaces/ src/vision_interfaces/
+
+# Build custom messages
+RUN . /opt/ros/humble/setup.sh && \
+    colcon build
+
+WORKDIR /app
+# COPY core/ /app/core/
+COPY image_point_to_3d_node/ /app/image_point_to_3d_node/
+
+# RUN pip install -e /app/core/
+
+ENV PYTHONPATH="${PYTHONPATH}:/app/image_point_to_3d_node"
+
+
+RUN chmod +x ./image_point_to_3d_node/entrypoint.sh
+
+# Set the entry point
+ENTRYPOINT ["./image_point_to_3d_node/entrypoint.sh"]
+
+
+CMD ["python3", "/app/image_point_to_3d_node/main.py"]

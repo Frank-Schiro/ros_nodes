@@ -1,0 +1,32 @@
+FROM ros:humble-perception
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    python3-opencv \
+    python3-pip \
+    python3-cv-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip install opencv-python
+
+# upgrade numpy for type hints
+RUN pip install "numpy>=1.24.0,<1.25.0"
+
+# Set working directory
+WORKDIR /python
+
+COPY topic_reader/realsense_subscriber.py .
+
+# Create an entrypoint script
+RUN echo '#!/bin/bash\nsource /opt/ros/humble/setup.bash\nexec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+# Set the entry point to use the entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Set the default command to run the script
+CMD ["python3", "realsense_subscriber.py"]
+
+# ENTRYPOINT ["python3", "realsense_subscriber.py"]
+
+# source /opt/ros/humble/setup.bash

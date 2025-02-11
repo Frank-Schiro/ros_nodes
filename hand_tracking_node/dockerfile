@@ -1,0 +1,82 @@
+FROM ros:humble-perception
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    python3-opencv \
+    python3-pip \
+    python3-cv-bridge \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip install opencv-python
+
+RUN pip install mediapipe
+
+
+# =============== #
+# D435i
+# =============== #
+
+# Install basic dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    software-properties-common \
+    wget \
+    curl \
+    lsb-release \
+    gpg \
+    udev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Step 1: Add the key first
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | tee /etc/apt/keyrings/librealsense.pgp > /dev/null
+
+# Step 2: Then configure the repository
+RUN echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo jammy main" | \
+    tee /etc/apt/sources.list.d/librealsense.list && \
+    apt-get update && \
+    apt-get install -y librealsense2-utils librealsense2
+
+
+
+# Step 3 - Install developer and debug packages
+RUN apt-get install -y \
+    librealsense2-dev \
+    librealsense2-dbg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install pyrealsense2
+
+RUN apt-get update && apt-get install -y ros-humble-vision-msgs
+
+# Create workspace for custom messages
+WORKDIR /ws
+COPY vision_interfaces/ src/vision_interfaces/
+
+# Build custom messages
+RUN . /opt/ros/humble/setup.sh && \
+    colcon build
+
+WORKDIR /app
+# COPY core/ /app/core/
+COPY hand_tracking_node/ /app/hand_tracking_node/
+
+# RUN pip install -e /app/core/
+
+ENV PYTHONPATH="${PYTHONPATH}:/app/hand_tracking_node"
+
+# Create an entrypoint script
+# RUN echo '#!/bin/bash\nsource /opt/ros/humble/setup.bash\nexec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+RUN echo "=== Debugging file locations ==="
+RUN ls -la 
+RUN ls -la ./hand_tracking_node 
+RUN echo "=== End debug ==="
+
+RUN chmod +x ./hand_tracking_node/entrypoint.sh
+
+# Set the entry point
+ENTRYPOINT ["./hand_tracking_node/entrypoint.sh"]
+
+CMD ["python3", "/app/hand_tracking_node/main_custom_1.py"]

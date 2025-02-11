@@ -1,0 +1,93 @@
+version: '3.3'
+
+services:
+  realsense:
+    build:
+      context: ./realsense_d435i_node
+    privileged: true
+    ipc: host # for dds shared memory transport
+    environment:
+      - DISPLAY=${DISPLAY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ROS_DOMAIN_ID=42
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev:/dev
+      - /dev/shm:/dev/shm # Trying to fix this: [RTPS_TRANSPORT_SHM Error] Failed init_port fastrtps_port7413: open_and_lock_file failed -> Function open_port_internal # for dds shared memory transport
+      - /home/frank/dev/projects/AI/vision/d435i_docker_ros:/workspace
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+      - /dev/video2:/dev/video2
+      - /dev/bus/usb:/dev/bus/usb
+    network_mode: host
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  display_node:
+    # image: ros:humble-perception
+    privileged: true
+    ipc: host # for dds shared memory transport
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+      - SHOW_VIDEO=true
+    build:
+      context: .
+      dockerfile: display_node/Dockerfile
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev/shm:/dev/shm # for dds shared memory transport
+
+    network_mode: host
+
+  topic_reader:
+    # image: ros:humble-perception
+    privileged: true
+    ipc: host # for dds shared memory transport
+    environment:
+      - ROS_DOMAIN_ID=42
+    build:
+      context: .
+      dockerfile: topic_reader/Dockerfile
+    volumes:
+      - /dev/shm:/dev/shm # for dds shared memory transport
+
+    network_mode: host
+
+  hand_tracking:
+    # image: ros:humble-perception
+    privileged: true
+    ipc: host # for dds shared memory transport
+    environment:
+      - ROS_DOMAIN_ID=42
+      - SHOW_VIDEO=true
+    build:
+      context: .
+      dockerfile: hand_tracking_node/Dockerfile
+    volumes:
+      - /dev/shm:/dev/shm # for dds shared memory transport
+
+    network_mode: host
+
+  image_point_to_3d:
+    # image: ros:humble-perception
+    privileged: true
+    ipc: host # for dds shared memory transport
+    environment:
+      - ROS_DOMAIN_ID=42
+      - SHOW_VIDEO=true
+    build:
+      context: .
+      dockerfile: image_point_to_3d_node/Dockerfile
+    volumes:
+      - /dev/shm:/dev/shm # for dds shared memory transport
+
+    network_mode: host
