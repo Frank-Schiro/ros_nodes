@@ -81,11 +81,14 @@ RUN mkdir /workspace
 # Default command - launches RealSense camera node
 # CMD ["bash", "-c", "source /opt/ros/humble/setup.bash && ros2 launch realsense2_camera rs_launch.py pointcloud.enable:=true"]
 
+# https://github.com/IntelRealSense/realsense-ros
 # Launch full realsense suite
 CMD ["bash", "-c", "\
     source /opt/ros/humble/setup.bash && \
     ros2 launch realsense2_camera rs_launch.py \
     pointcloud.enable:=true \
+    pointcloud.ordered_pc:=true \
+    pointcloud.allow_no_texture_points:=true \
     align_depth.enable:=true \
     enable_sync:=true \
     enable_color:=true \
@@ -99,6 +102,8 @@ CMD ["bash", "-c", "\
     unite_imu_method:=1 \
     spatial_filter.enable:=true \
     temporal_filter.enable:=true \
+    # 2 means interpolate (0=none, 1=near pixel, 2=interpolate)
+    hole_filling_filter.holes_fill:=2 \
     hole_filling_filter.enable:=true \
     depth_module.depth_profile:=848x480x30 \
     rgb_camera.color_profile:=848x480x30 \

@@ -8,11 +8,18 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/HandLandmark.msg"
-  "msg/HandLandmarkArray.msg"
-  DEPENDENCIES std_msgs
+  "msg/HandLandmark2D.msg"
+  "msg/Hand2D.msg"
+  "msg/HandDetection2D.msg"
+  "msg/HandLandmark3D.msg"
+  "msg/Hand3D.msg"
+  "msg/HandDetection3D.msg"
+  DEPENDENCIES 
+    std_msgs
+    geometry_msgs
 )
 
 ament_package()

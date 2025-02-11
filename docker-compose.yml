@@ -76,7 +76,6 @@ services:
       - /dev/shm:/dev/shm # for dds shared memory transport
 
     network_mode: host
-
   image_point_to_3d:
     # image: ros:humble-perception
     privileged: true

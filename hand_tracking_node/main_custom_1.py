@@ -87,7 +87,7 @@ import cv2
 from src.tracking_service import HandTrackingService
 from src.mediapipe_hand_tracker_adapter import MediaPipeHandTrackerAdapter
 
-from vision_interfaces.msg import HandLandmark, HandLandmarkArray
+from vision_interfaces.msg import HandLandmark2D, Hand2D, HandDetection2D
 
 
 class HandTrackingNode(Node):
@@ -117,12 +117,8 @@ class HandTrackingNode(Node):
             Image, "/camera/camera/color/image_raw", self.image_callback, 10
         )
 
-        # Create publishers
-        # self.hand_landmarks_pub = self.create_publisher(
-        #     String, "hand_landmarks_json", 10
-        # )
-        self.hand_landmarks_pub = self.create_publisher(
-            HandLandmarkArray, "hand_landmarks", 10
+        self.hand_detection_pub = self.create_publisher(
+            HandDetection2D, "hand_detection_2d", 10
         )
 
         self.get_logger().info(
@@ -137,27 +133,44 @@ class HandTrackingNode(Node):
             # Process frame and get hand landmarks
             hand_results = self.tracking_service.process_frame(color_frame)
 
-            # Create messages for each detected hand
-            for hand_idx, hand in enumerate(hand_results):
-                hand_msg = HandLandmarkArray()
-                hand_msg.header = msg.header  # Use original image timestamp
-                hand_msg.hand_id = f"hand_{hand_idx}"
+            # Create HandDetection2D message
+            detection_msg = HandDetection2D()
+            detection_msg.header = msg.header  # Use original image timestamp
+            detection_msg.image_width = msg.width
+            detection_msg.image_height = msg.height
 
-                # Convert each landmark to message format
+            # Process each detected hand
+            for hand_idx, hand in enumerate(hand_results):
+                hand_msg = Hand2D()
+                hand_msg.hand_id = f"hand_{hand_idx}"
+                hand_msg.handedness = (
+                    "UNKNOWN"  # You might want to add this to your tracking service
+                )
+                hand_msg.tracking_status = "TRACKING"
+                hand_msg.tracking_confidence = (
+                    1.0  # Set this based on your tracker's confidence
+                )
+
+                # Convert each landmark to 2D message format
                 for landmark_name, (x, y) in hand.landmark_points.items():
-                    landmark = HandLandmark()
-                    landmark.landmark_name = landmark_name
-                    landmark.x = int(x)
-                    landmark.y = int(y)
+                    landmark = HandLandmark2D()
+                    landmark.name = landmark_name
+                    landmark.pixel_x = int(x)
+                    landmark.pixel_y = int(y)
+                    landmark.detection_confidence = (
+                        1.0  # Set this based on your tracker's confidence
+                    )
                     hand_msg.landmarks.append(landmark)
 
-                # Publish the landmarks
-                self.hand_landmarks_pub.publish(hand_msg)
+                detection_msg.hands.append(hand_msg)
 
-                if len(hand_results) > 0:
-                    self.get_logger().info(
-                        f"Published Hand Landmarks for hand_{hand_idx}"
-                    )
+            # Publish the hand detection message
+            self.hand_detection_pub.publish(detection_msg)
+
+            if len(hand_results) > 0:
+                self.get_logger().debug(
+                    f"Published HandDetection2D with {len(hand_results)} hands"
+                )
 
             # Handle visualization if enabled
             if self.show_video:
