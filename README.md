@@ -35,10 +35,16 @@ RUN echo "=== End debug ==="
 
 ```bash
 xhost +local:root
-docker compose up --build
+docker compose up
 
 IF IT FAILS TRY ACTIVATING peakInt!
 'mdlbase'
+```
+
+```bash
+source /opt/ros/humble/setup.bash
+source /ws/install/setup.bash
+ros2 topic echo /hand_detection_3d
 ```
 
 If you are having trouble with no frame data

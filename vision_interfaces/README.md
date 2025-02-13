@@ -8,7 +8,6 @@ These are custum messages. Currently only for the hand object, which keeps track
 string name                    # e.g. "WRIST", "THUMB_TIP"
 int32 pixel_x
 int32 pixel_y
-float64 detection_confidence
 
 # Hand2D.msg
 std_msgs/Header header        # timestamp + frame_id (camera_color_optical_frame)

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -6,8 +7,22 @@ from typing import Dict, List, Tuple
 from src.hand_tracker_port import HandTrackerPort, HandLandmarks
 
 
+@dataclass
+class HandInfo:
+    """Enhanced hand tracking information"""
+
+    landmark_points: Dict[str, Tuple[float, float]]
+    handedness: str
+    tracking_confidence: float
+    landmark_confidences: Dict[str, float]
+    tracking_status: str
+
+
 class MediaPipeHandTrackerAdapter(HandTrackerPort):
-    """Adapter that implements hand tracking using MediaPipe"""
+    """
+    Adapter that implements hand tracking using MediaPipe
+    https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/python/solutions/hands.py
+    """
 
     # Dictionary mapping landmark names to indices
     HAND_LANDMARKS = {
@@ -45,6 +60,15 @@ class MediaPipeHandTrackerAdapter(HandTrackerPort):
             min_tracking_confidence=0.7,
         )
 
+    def _determine_tracking_status(self, confidence: float) -> str:
+        """Determine tracking status based on confidence score"""
+        if confidence >= 0.8:
+            return "TRACKING"
+        elif confidence >= 0.5:
+            return "UNCERTAIN"
+        else:
+            return "LOST"
+
     def process_frame(self, frame: np.ndarray) -> List[HandLandmarks]:
         """Process frame to detect and track hands
 
@@ -66,23 +90,54 @@ class MediaPipeHandTrackerAdapter(HandTrackerPort):
         detected_hands = []
         height, width = frame.shape[:2]
 
-        for hand_landmarks in results.multi_hand_landmarks:
+        for idx, (hand_landmarks, hand_handedness) in enumerate(
+            zip(results.multi_hand_landmarks, results.multi_handedness)
+        ):
             # Store MediaPipe landmarks for drawing
             self._latest_mp_landmarks.append(hand_landmarks)
 
+            # Get handedness (LEFT/RIGHT) and confidence
+            handedness = hand_handedness.classification[0].label.upper()
+            tracking_confidence = hand_handedness.classification[0].score
+            # Determine tracking status
+            tracking_status = self._determine_tracking_status(tracking_confidence)
+
             # Store 2D coordinates for each landmark
             landmarks_2d = {}
+            landmark_confidences = {}
 
             for landmark_name, idx in self.HAND_LANDMARKS.items():
                 landmark = hand_landmarks.landmark[idx]
                 # Store normalized coordinates (0-1 range)
                 # landmarks_2d[landmark_name] = (landmark.x, landmark.y)
                 # Convert normalized coordinates to pixel coordinates
-                pixel_x = int(landmark.x * width)
-                pixel_y = int(landmark.y * height)
+                # pixel_x = int(landmark.x * width)
+                # pixel_y = int(landmark.y * height)
+                # Because width is out of bounds need width - 1 since starts at zero.
+
+                pixel_x = max(0, int(landmark.x * width) - 1)
+                pixel_y = max(0, int(landmark.y * height) - 1)
                 landmarks_2d[landmark_name] = (pixel_x, pixel_y)
 
-            detected_hands.append(HandLandmarks(landmark_points=landmarks_2d))
+                print(f"landmark.x: {landmark.x}, landmark.y: {landmark.y}", flush=True)
+                print(f"height: {height}, width: {width}", flush=True)
+                print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
+                print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
+
+                landmark_confidences[landmark_name] = landmark.visibility
+
+            # detected_hands.append(HandLandmarks(landmark_points=landmarks_2d))
+
+            # Create HandInfo object with all tracking data
+            hand_info = HandInfo(
+                landmark_points=landmarks_2d,
+                handedness=handedness,
+                tracking_confidence=tracking_confidence,
+                landmark_confidences=landmark_confidences,
+                tracking_status=tracking_status,
+            )
+
+            detected_hands.append(hand_info)
 
         return detected_hands
 

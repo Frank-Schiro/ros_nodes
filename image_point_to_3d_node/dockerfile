@@ -15,6 +15,8 @@ RUN pip install mediapipe
 
 RUN apt-get update && apt-get install -y ros-humble-vision-msgs
 
+RUN pip install transforms3d
+
 # Add custom ROS2 message interfaces
 WORKDIR /ws
 COPY vision_interfaces/ src/vision_interfaces/
@@ -33,6 +35,8 @@ ENV PYTHONPATH="${PYTHONPATH}:/app/image_point_to_3d_node"
 
 
 RUN chmod +x ./image_point_to_3d_node/entrypoint.sh
+
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Set the entry point
 ENTRYPOINT ["./image_point_to_3d_node/entrypoint.sh"]

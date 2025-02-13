@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking and Joint Orientation Guide</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c5282;
+        }
+
+        .content-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .coordinate-system {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .note {
+            background-color: #ebf8ff;
+            padding: 15px;
+            border-left: 4px solid #4299e1;
+            margin: 20px 0;
+        }
+
+        code {
+            background: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .illustration {
+            max-width: 100%;
+            height: auto;
+            margin: 20px 0;
+        }
+
+        .key-point {
+            background: #e6ffed;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+        }
+
+        th {
+            background: #f7fafc;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Hand Tracking and Joint Orientation Guide</h1>
+
+    <div class="content-section">
+        <h2>MediaPipe Hand Landmarks</h2>
+        <p>MediaPipe provides 21 3D landmarks for each detected hand. These landmarks correspond to key anatomical
+            points:</p>
+
+        <svg viewBox="0 0 400 500" width="400" height="500">
+            <!-- Hand outline -->
+            <path d="M200,400 L180,300 L160,250 L140,240 L140,350 L200,400 L260,350 L260,240 L240,250 L220,300 L200,400"
+                fill="#f0f0f0" stroke="#000000" stroke-width="2" />
+
+            <!-- Middle finger detail -->
+            <path d="M200,400 L200,200 L200,150 L200,100" fill="none" stroke="#000000" stroke-width="3" />
+
+            <!-- Joints -->
+            <circle cx="200" cy="400" r="6" fill="#ff0000" />
+            <text x="220" y="405" font-size="14">WRIST</text>
+
+            <circle cx="200" cy="300" r="6" fill="#00aa00" />
+            <text x="220" y="305" font-size="14">MCP Joint</text>
+            <text x="220" y="320" font-size="12">(Metacarpophalangeal)</text>
+
+            <circle cx="200" cy="200" r="6" fill="#0000ff" />
+            <text x="220" y="205" font-size="14">PIP Joint</text>
+            <text x="220" y="220" font-size="12">(Proximal Interphalangeal)</text>
+
+            <circle cx="200" cy="150" r="6" fill="purple" />
+            <text x="220" y="155" font-size="14">DIP Joint</text>
+            <text x="220" y="170" font-size="12">(Distal Interphalangeal)</text>
+
+            <circle cx="200" cy="100" r="6" fill="orange" />
+            <text x="220" y="105" font-size="14">TIP</text>
+            <text x="220" y="120" font-size="12">(Not a joint)</text>
+        </svg>
+    </div>
+
+    <div class="content-section">
+        <h2>Joint Coordinate Systems</h2>
+        <p>At each joint, we establish a local coordinate system:</p>
+
+        <svg viewBox="0 0 500 300" width="500" height="300">
+            <!-- Finger outline -->
+            <path d="M100,150 Q200,140 300,150 T400,170" fill="none" stroke="#000000" stroke-width="3" />
+
+            <!-- Joint points -->
+            <circle cx="100" cy="150" r="5" fill="#000000" />
+            <text x="85" y="180">MCP</text>
+
+            <circle cx="200" cy="140" r="5" fill="#000000" />
+            <text x="185" y="170">PIP</text>
+
+            <circle cx="300" cy="150" r="5" fill="#000000" />
+            <text x="285" y="180">DIP</text>
+
+            <circle cx="400" cy="170" r="5" fill="#000000" />
+            <text x="385" y="200">TIP</text>
+
+            <!-- Coordinate axes at MCP -->
+            <g transform="translate(100,150)">
+                <line x1="0" y1="0" x2="30" y2="-10" stroke="#ff0000" stroke-width="2" />
+                <line x1="0" y1="0" x2="0" y2="-30" stroke="#00ff00" stroke-width="2" />
+                <line x1="0" y1="0" x2="30" y2="0" stroke="#0000ff" stroke-width="2" />
+            </g>
+
+            <!-- Legend -->
+            <g transform="translate(20,250)">
+                <line x1="0" y1="0" x2="20" y2="0" stroke="#ff0000" stroke-width="2" />
+                <text x="25" y="5">X (right)</text>
+                <line x1="100" y1="0" x2="120" y2="0" stroke="#00ff00" stroke-width="2" />
+                <text x="125" y="5">Y (up)</text>
+                <line x1="200" y1="0" x2="220" y2="0" stroke="#0000ff" stroke-width="2" />
+                <text x="225" y="5">Z (forward)</text>
+            </g>
+        </svg>
+
+        <div class="key-point">
+            <h3>Important Note About Up Vector</h3>
+            <p>The Y (up) vector starts as [0,1,0] in camera coordinates and remains consistent across all joints due to
+                how we compute our coordinate systems:</p>
+            <code>
+                up = normalize(cross(right, forward))<br>
+                where right = normalize(cross(forward, [0,1,0]))
+            </code>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Computing Joint Orientations</h2>
+        <table>
+            <tr>
+                <th>Step</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>1. Forward Vector</td>
+                <td>Compute Z axis by finding vector between current joint and next joint</td>
+            </tr>
+            <tr>
+                <td>2. Up Vector</td>
+                <td>Use consistent [0,1,0] as reference</td>
+            </tr>
+            <tr>
+                <td>3. Right Vector</td>
+                <td>Compute X axis using cross product of forward and up</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="content-section">
+        <h2>MediaPipe Landmark Details</h2>
+        <div class="note">
+            <p>MediaPipe hand landmarks represent anatomical points on the hand. Each point provides:</p>
+            <ul>
+                <li>3D coordinates (x, y, z) in camera space</li>
+                <li>Normalized coordinates (0-1 range for x,y in image space)</li>
+                <li>Confidence score for the detection</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Computing Quaternions</h2>
+        <p>Once we have our coordinate system at each joint, we convert to quaternions:</p>
+        <pre><code>
+def rotation_matrix_to_quaternion(R):
+    trace = np.trace(R)
+    if trace > 0:
+        S = np.sqrt(trace + 1.0) * 2
+        w = 0.25 * S
+        x = (R[2,1] - R[1,2]) / S
+        y = (R[0,2] - R[2,0]) / S
+        z = (R[1,0] - R[0,1]) / S
+    return Quaternion(x=x, y=y, z=z, w=w)
+        </code></pre>
+    </div>
+</body>
+
+</html>
