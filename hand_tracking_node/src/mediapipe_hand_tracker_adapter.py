@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 from typing import Dict, List, Tuple
-
+import os
 from src.hand_tracker_port import HandTrackerPort, HandLandmarks
 
 
@@ -118,11 +118,14 @@ class MediaPipeHandTrackerAdapter(HandTrackerPort):
                 pixel_x = max(0, int(landmark.x * width) - 1)
                 pixel_y = max(0, int(landmark.y * height) - 1)
                 landmarks_2d[landmark_name] = (pixel_x, pixel_y)
-
-                print(f"landmark.x: {landmark.x}, landmark.y: {landmark.y}", flush=True)
-                print(f"height: {height}, width: {width}", flush=True)
-                print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
-                print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
+                if os.getenv("DEBUG") == "true":
+                    print(f"landmark_name: {landmark_name}", flush=True)
+                    print(
+                        f"landmark.x: {landmark.x}, landmark.y: {landmark.y}",
+                        flush=True,
+                    )
+                    print(f"height: {height}, width: {width}", flush=True)
+                    print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
 
                 landmark_confidences[landmark_name] = landmark.visibility
 

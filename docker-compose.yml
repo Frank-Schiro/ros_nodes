@@ -83,6 +83,8 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - SHOW_VIDEO=true
+      - DEBUG=false
+      - ROS_LOG_LEVEL=info
     build:
       context: .
       dockerfile: image_point_to_3d_node/Dockerfile

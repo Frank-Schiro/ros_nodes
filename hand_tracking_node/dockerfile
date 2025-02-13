@@ -79,4 +79,4 @@ RUN chmod +x ./hand_tracking_node/entrypoint.sh
 # Set the entry point
 ENTRYPOINT ["./hand_tracking_node/entrypoint.sh"]
 
-CMD ["python3", "/app/hand_tracking_node/main_custom_1.py"]
+CMD ["python3", "/app/hand_tracking_node/main.py"]
