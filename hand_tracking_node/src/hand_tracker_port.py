@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 import numpy as np
+from vision_interfaces.msg import Hand2D
 
 
 @dataclass
@@ -18,6 +19,19 @@ class HandLandmarks:
 
 class HandTrackerPort(ABC):
     """Abstract interface for hand tracking implementations"""
+
+    @abstractmethod
+    def process_frame2(self, frame: np.ndarray, frame_id: str) -> List[Hand2D]:
+        """Process a color frame to detect and track hands
+
+        Args:
+            frame: BGR color image
+            frame_id: The frame_id for the ROS message header
+
+        Returns:
+            List of Hand2D messages containing detected hand data
+        """
+        pass
 
     @abstractmethod
     def process_frame(self, frame: np.ndarray) -> List[HandLandmarks]:

@@ -5,6 +5,7 @@ import mediapipe as mp
 from typing import Dict, List, Tuple
 import os
 from src.hand_tracker_port import HandTrackerPort, HandLandmarks
+from vision_interfaces.msg import Hand2D, HandLandmark2D
 
 
 @dataclass
@@ -69,14 +70,15 @@ class MediaPipeHandTrackerAdapter(HandTrackerPort):
         else:
             return "LOST"
 
-    def process_frame(self, frame: np.ndarray) -> List[HandLandmarks]:
+    def process_frame2(self, frame: np.ndarray) -> List[Hand2D]:
         """Process frame to detect and track hands
 
         Args:
             frame: BGR color image
+            frame_id: The frame_id for the ROS message header
 
         Returns:
-            List of HandLandmarks with hand tracking data
+            List of Hand2D messages
         """
         # Process hands
         results = self.hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -87,62 +89,114 @@ class MediaPipeHandTrackerAdapter(HandTrackerPort):
         if not results.multi_hand_landmarks:
             return []
 
-        detected_hands = []
+        output: List[Hand2D] = []
         height, width = frame.shape[:2]
+
+        # Store MediaPipe landmarks for visualization
+        self._latest_mp_landmarks = results.multi_hand_landmarks
 
         for idx, (hand_landmarks, hand_handedness) in enumerate(
             zip(results.multi_hand_landmarks, results.multi_handedness)
         ):
-            # Store MediaPipe landmarks for drawing
-            self._latest_mp_landmarks.append(hand_landmarks)
+            # Create Hand2D message
+            hand_msg = Hand2D()
 
-            # Get handedness (LEFT/RIGHT) and confidence
-            handedness = hand_handedness.classification[0].label.upper()
-            tracking_confidence = hand_handedness.classification[0].score
-            # Determine tracking status
-            tracking_status = self._determine_tracking_status(tracking_confidence)
+            # Set hand identification
+            hand_msg.hand_id = f"hand_{idx}"
+            hand_msg.handedness = hand_handedness.classification[0].label.upper()
+            hand_msg.tracking_confidence = hand_handedness.classification[0].score
 
-            # Store 2D coordinates for each landmark
-            landmarks_2d = {}
-            landmark_confidences = {}
+            # Process landmarks
+            for landmark_name, landmark_idx in self.HAND_LANDMARKS.items():
+                landmark = hand_landmarks.landmark[landmark_idx]
 
-            for landmark_name, idx in self.HAND_LANDMARKS.items():
-                landmark = hand_landmarks.landmark[idx]
-                # Store normalized coordinates (0-1 range)
-                # landmarks_2d[landmark_name] = (landmark.x, landmark.y)
-                # Convert normalized coordinates to pixel coordinates
-                # pixel_x = int(landmark.x * width)
-                # pixel_y = int(landmark.y * height)
-                # Because width is out of bounds need width - 1 since starts at zero.
+                # Create HandLandmark2D message
+                landmark_msg = HandLandmark2D()
+                landmark_msg.name = landmark_name
+                landmark_msg.pixel_x = max(0, min(width - 1, int(landmark.x * width)))
+                landmark_msg.pixel_y = max(0, min(height - 1, int(landmark.y * height)))
 
-                pixel_x = max(0, int(landmark.x * width) - 1)
-                pixel_y = max(0, int(landmark.y * height) - 1)
-                landmarks_2d[landmark_name] = (pixel_x, pixel_y)
-                if os.getenv("DEBUG") == "true":
-                    print(f"landmark_name: {landmark_name}", flush=True)
-                    print(
-                        f"landmark.x: {landmark.x}, landmark.y: {landmark.y}",
-                        flush=True,
-                    )
-                    print(f"height: {height}, width: {width}", flush=True)
-                    print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
+                hand_msg.landmarks.append(landmark_msg)
 
-                landmark_confidences[landmark_name] = landmark.visibility
+            output.append(hand_msg)
 
-            # detected_hands.append(HandLandmarks(landmark_points=landmarks_2d))
+        return output
 
-            # Create HandInfo object with all tracking data
-            hand_info = HandInfo(
-                landmark_points=landmarks_2d,
-                handedness=handedness,
-                tracking_confidence=tracking_confidence,
-                landmark_confidences=landmark_confidences,
-                tracking_status=tracking_status,
-            )
+    def process_frame(self, frame: np.ndarray) -> List[HandLandmarks]:
+        pass
 
-            detected_hands.append(hand_info)
+    # def process_frame(self, frame: np.ndarray) -> List[HandLandmarks]:
+    #     """Process frame to detect and track hands
 
-        return detected_hands
+    #     Args:
+    #         frame: BGR color image
+
+    #     Returns:
+    #         List of HandLandmarks with hand tracking data
+    #     """
+    #     # Process hands
+    #     results = self.hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+    #     # Clear previous landmarks
+    #     self._latest_mp_landmarks = []
+
+    #     if not results.multi_hand_landmarks:
+    #         return []
+
+    #     detected_hands: List[HandLandmarks] = []
+    #     height, width = frame.shape[:2]
+
+    #     for idx, (hand_landmarks, hand_handedness) in enumerate(
+    #         zip(results.multi_hand_landmarks, results.multi_handedness)
+    #     ):
+    #         # Store MediaPipe landmarks for drawing
+    #         self._latest_mp_landmarks.append(hand_landmarks)
+
+    #         # Get handedness (LEFT/RIGHT) and confidence
+    #         handedness = hand_handedness.classification[0].label.upper()
+    #         tracking_confidence = hand_handedness.classification[0].score
+    #         # Determine tracking status
+    #         tracking_status = self._determine_tracking_status(tracking_confidence)
+
+    #         # Store 2D coordinates for each landmark
+    #         landmarks_2d = {}
+    #         landmark_confidences = {}
+
+    #         for landmark_name, idx in self.HAND_LANDMARKS.items():
+    #             landmark = hand_landmarks.landmark[idx]
+    #             # Store normalized coordinates (0-1 range)
+    #             # landmarks_2d[landmark_name] = (landmark.x, landmark.y)
+    #             # Convert normalized coordinates to pixel coordinates
+    #             # pixel_x = int(landmark.x * width)
+    #             # pixel_y = int(landmark.y * height)
+    #             # Because width is out of bounds need width - 1 since starts at zero.
+
+    #             pixel_x = max(0, int(landmark.x * width) - 1)
+    #             pixel_y = max(0, int(landmark.y * height) - 1)
+    #             landmarks_2d[landmark_name] = (pixel_x, pixel_y)
+    #             if os.getenv("DEBUG") == "true":
+    #                 print(f"landmark_name: {landmark_name}", flush=True)
+    #                 print(
+    #                     f"landmark.x: {landmark.x}, landmark.y: {landmark.y}",
+    #                     flush=True,
+    #                 )
+    #                 print(f"height: {height}, width: {width}", flush=True)
+    #                 print(f"pixel_x: {pixel_x}, pixel_y: {pixel_y}", flush=True)
+
+    #             landmark_confidences[landmark_name] = landmark.visibility
+
+    #         # Create HandInfo object with all tracking data
+    #         hand_info = HandInfo(
+    #             landmark_points=landmarks_2d,
+    #             handedness=handedness,
+    #             tracking_confidence=tracking_confidence,
+    #             landmark_confidences=landmark_confidences,
+    #             tracking_status=tracking_status,
+    #         )
+
+    #         detected_hands.append(hand_info)
+
+    #     return detected_hands
 
     def draw_landmarks(
         self, image: np.ndarray, landmarks: List[HandLandmarks]

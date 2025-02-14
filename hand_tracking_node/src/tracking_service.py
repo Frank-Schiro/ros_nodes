@@ -24,7 +24,7 @@ class HandTrackingService:
         Returns:
             List of HandLandmarks containing hand data
         """
-        return self._hand_tracker.process_frame(frame)
+        return self._hand_tracker.process_frame2(frame)
 
     def draw_landmarks(
         self, image: np.ndarray, landmarks: List[HandLandmarks]
