@@ -1,0 +1,15 @@
+# tests/docker-compose.yml
+version: '3'
+
+services:
+  test:
+    build:
+      context: .. # the root directory for COPY commands
+      dockerfile: tests/Dockerfile
+    network_mode: "host" # To communicate with main ROS services
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=42
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    command: python3 -m pytest -v

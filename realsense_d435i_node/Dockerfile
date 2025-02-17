@@ -105,6 +105,6 @@ CMD ["bash", "-c", "\
     # 2 means interpolate (0=none, 1=near pixel, 2=interpolate)
     hole_filling_filter.holes_fill:=2 \
     hole_filling_filter.enable:=true \
-    depth_module.depth_profile:=848x480x30 \
-    rgb_camera.color_profile:=848x480x30 \
+    depth_module.depth_profile:=1280x720x30 \
+    rgb_camera.color_profile:=1280x720x30 \
     "]

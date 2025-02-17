@@ -1,3 +1,34 @@
+
+# See the output of code in docker compose
+
+We have to fix the python-buffer, docker-cache, and docker log level 
+
+* --progress=plain: Set D's log level by default D hides messages unless there is an error
+* --no-cache: invalidate D's cache
+* -u: Fix the python buffer
+
+```bash
+docker compose -f ./tests/docker-compose.yml build --progress=plain --no-cache
+```
+
+* In the dockerfile, use -u for unbuffered output. 
+
+```Dockerfile
+RUN echo "=========================================="
+RUN echo "=== Testing pytest  ==="
+RUN echo "=========================================="
+RUN python3 -u -m pytest --version
+```
+
+* This should print
+
+```bash
+#17 0.296 pytest 6.2.5
+```
+
+
+
+
 # Overview
 
 Trying to get realsense-ros running in the d435i container
@@ -198,6 +229,71 @@ sudo chmod 666 /dev/bus/usb/$(lsusb | grep '8086' | awk '{print $2}')/*
 
 
 
+[DEBUG] [1739580287.061995401] [hand_3d_tracking_node]: Received HandDetection2D message: vision_interfaces.msg.HandDetection2D(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1739580286, nanosec=966527588), frame_id='camera_color_optical_frame'), hands=[vision_interfaces.msg.Hand2D(hand_id='hand_0', handedness='RIGHT', 
+landmarks=[vision_interfaces.msg.HandLandmark2D(name='WRIST', pixel_x=135, pixel_y=274), 
+vision_interfaces.msg.HandLandmark2D(name='THUMB_CMC', pixel_x=217, pixel_y=183), 
+vision_interfaces.msg.HandLandmark2D(name='THUMB_MCP', pixel_x=325, pixel_y=144), 
+vision_interfaces.msg.HandLandmark2D(name='THUMB_IP', pixel_x=405, pixel_y=158), 
+vision_interfaces.msg.HandLandmark2D(name='THUMB_TIP', pixel_x=455, pixel_y=184), 
+vision_interfaces.msg.HandLandmark2D(name='INDEX_FINGER_MCP', pixel_x=381, pixel_y=144), 
+vision_interfaces.msg.HandLandmark2D(name='INDEX_FINGER_PIP', pixel_x=491, pixel_y=132), 
+vision_interfaces.msg.HandLandmark2D(name='INDEX_FINGER_DIP', pixel_x=543, pixel_y=135), 
+vision_interfaces.msg.HandLandmark2D(name='INDEX_FINGER_TIP', pixel_x=578, pixel_y=133), 
+vision_interfaces.msg.HandLandmark2D(name='MIDDLE_FINGER_MCP', pixel_x=383, pixel_y=206), 
+vision_interfaces.msg.HandLandmark2D(name='MIDDLE_FINGER_PIP', pixel_x=463, pixel_y=213), 
+vision_interfaces.msg.HandLandmark2D(name='MIDDLE_FINGER_DIP', pixel_x=411, pixel_y=219), 
+vision_interfaces.msg.HandLandmark2D(name='MIDDLE_FINGER_TIP', pixel_x=358, pixel_y=211), 
+vision_interfaces.msg.HandLandmark2D(name='RING_FINGER_MCP', pixel_x=376, pixel_y=269), 
+vision_interfaces.msg.HandLandmark2D(name='RING_FINGER_PIP', pixel_x=439, pixel_y=272), 
+vision_interfaces.msg.HandLandmark2D(name='RING_FINGER_DIP', pixel_x=384, pixel_y=273),
+ vision_interfaces.msg.HandLandmark2D(name='RING_FINGER_TIP', pixel_x=339, pixel_y=266), 
+ vision_interfaces.msg.HandLandmark2D(name='PINKY_MCP', pixel_x=361, pixel_y=328), 
+ vision_interfaces.msg.HandLandmark2D(name='PINKY_PIP', pixel_x=414, pixel_y=329), 
+ vision_interfaces.msg.HandLandmark2D(name='PINKY_DIP', pixel_x=376, pixel_y=319), 
+ vision_interfaces.msg.HandLandmark2D(name='PINKY_TIP', pixel_x=342, pixel_y=314)
+ ], tracking_confidence=0.8633601665496826)], image_width=848, image_height=480)
+
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.064569658] [hand_3d_tracking_node]: Published HandDetection3D object to topic: 'hand_detection_3d' with 1 hands
+d435i_docker_ros-image_point_to_3d-1  | [DEBUG] [1739580287.064889610] [hand_3d_tracking_node]: HandDetection3D: vision_interfaces.msg.HandDetection3D(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1739580286, nanosec=966527588), frame_id='camera_link'), 
+hands=[
+    vision_interfaces.msg.Hand3D(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=0, nanosec=0), frame_id=''), 
+    hand_id='hand_0', 
+    landmarks=[vision_interfaces.msg.HandLandmark3D(name='WRIST', position=geometry_msgs.msg.Point(x=-9.164176940917969, y=1.1500016450881958, z=13.432001113891602), orientation=geometry_msgs.msg.Quaternion(x=-0.03693656683877652, y=-0.294341521637242, z=0.0, w=0.9549862609851713)), vision_interfaces.msg.HandLandmark3D(name='THUMB_CMC', position=geometry_msgs.msg.Point(x=-0.19268544018268585, y=-0.05007766932249069, z=0.3930000066757202), orientation=geometry_msgs.msg.Quaternion(x=0.1280051777733132, y=0.9450071786359582, z=0.0, w=0.3009586463116296)), vision_interfaces.msg.HandLandmark3D(name='THUMB_MCP', position=geometry_msgs.msg.Point(x=-0.08643336594104767, y=-0.0796167179942131, z=0.36400002241134644), orientation=geometry_msgs.msg.Quaternion(x=-0.08343441117008933, y=0.9329254608501378, z=0.0, w=0.35026958693306276)), vision_interfaces.msg.HandLandmark3D(name='THUMB_IP', position=geometry_msgs.msg.Point(x=-0.009080012328922749, y=-0.033657267689704895, z=0.1810000091791153), orientation=geometry_msgs.msg.Quaternion(x=-0.2373605349616268, y=0.7186707023600716, z=2.7755575615628914e-17, w=0.6535842700157434)), 
+    vision_interfaces.msg.HandLandmark3D(name='THUMB_TIP', position=geometry_msgs.msg.Point(x=0.02321065217256546, y=-0.04340380057692528, z=0.34700000286102295), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)), 
+    vision_interfaces.msg.HandLandmark3D(name='INDEX_FINGER_MCP', position=geometry_msgs.msg.Point(x=-0.019143424928188324, y=-0.03937090188264847, z=0.18000000715255737), orientation=geometry_msgs.msg.Quaternion(x=0.12650048395832042, y=0.9442526504711115, z=0.0, w=0.3039482844771313)), vision_interfaces.msg.HandLandmark3D(name='INDEX_FINGER_PIP', position=geometry_msgs.msg.Point(x=0.051851075142621994, y=-0.08465944230556488, z=0.34300002455711365), orientation=geometry_msgs.msg.Quaternion(x=0.1111154942498626, y=0.29694191899319333, z=-1.3016036733825414e-17, w=0.948408584778864)), 
+    vision_interfaces.msg.HandLandmark3D(name='INDEX_FINGER_DIP', position=geometry_msgs.msg.Point(x=0.09224250912666321, y=-0.08105145394802094, z=0.33800002932548523), orientation=geometry_msgs.msg.Quaternion(x=-0.030755884189877524, y=0.7471718810769363, z=-0.0, w=0.663918862298437)), vision_interfaces.msg.HandLandmark3D(name='INDEX_FINGER_TIP', position=geometry_msgs.msg.Point(x=0.11887325346469879, y=-0.08190060406923294, z=0.33500000834465027), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)), 
+    vision_interfaces.msg.HandLandmark3D(name='MIDDLE_FINGER_MCP', position=geometry_msgs.msg.Point(x=-1.2663017511367798, y=-0.9164222478866577, z=12.455000877380371), orientation=geometry_msgs.msg.Quaternion(x=0.12027125332177657, y=0.9452927452041632, z=-0.0, w=0.3032432216699765)), vision_interfaces.msg.HandLandmark3D(name='MIDDLE_FINGER_PIP', position=geometry_msgs.msg.Point(x=0.02953832969069481, y=-0.019730867817997932, z=0.3450000286102295), orientation=geometry_msgs.msg.Quaternion(x=-0.5851349840438614, y=0.8085328096899006, z=-0.0, w=0.06238386091727152)), vision_interfaces.msg.HandLandmark3D(name='MIDDLE_FINGER_DIP', position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0306379938162663, y=-0.0823703719234673, z=-0.0, w=0.9961307319644865)), 
+    vision_interfaces.msg.HandLandmark3D(name='MIDDLE_FINGER_TIP', position=geometry_msgs.msg.Point(x=-2.1517770290374756, y=-0.8310799598693848, z=13.432001113891602), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)), 
+    vision_interfaces.msg.HandLandmark3D(name='RING_FINGER_MCP', position=geometry_msgs.msg.Point(x=-0.021604593843221664, y=0.013525716960430145, z=0.18300001323223114), orientation=geometry_msgs.msg.Quaternion(x=0.11508793512315628, y=0.9457532929003984, z=0.0, w=0.30381816298098546)), vision_interfaces.msg.HandLandmark3D(name='RING_FINGER_PIP', position=geometry_msgs.msg.Point(x=0.012125899083912373, y=0.033344950526952744, z=0.41200003027915955), orientation=geometry_msgs.msg.Quaternion(x=0.5293733741053782, y=0.8455667653272276, z=-0.0, w=0.06914243387628757)), vision_interfaces.msg.HandLandmark3D(name='RING_FINGER_DIP', position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.9389223986574706, y=-0.3414393506010064, z=0.0, w=0.0429406469497706)), 
+    vision_interfaces.msg.HandLandmark3D(name='RING_FINGER_TIP', position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)), 
+    vision_interfaces.msg.HandLandmark3D(name='PINKY_MCP', position=geometry_msgs.msg.Point(x=-0.03722139820456505, y=0.051524817943573, z=0.24300001561641693), orientation=geometry_msgs.msg.Quaternion(x=0.11367826475299901, y=0.9470426974997231, z=-0.0, w=0.30031213967336506)), vision_interfaces.msg.HandLandmark3D(name='PINKY_PIP', position=geometry_msgs.msg.Point(x=-0.0068957190960645676, y=0.050807446241378784, z=0.2370000183582306), orientation=geometry_msgs.msg.Quaternion(x=0.11734379035645406, y=0.2811667428076605, z=2.7755575615628914e-17, w=0.9524577143389156)), 
+    vision_interfaces.msg.HandLandmark3D(name='PINKY_DIP', position=geometry_msgs.msg.Point(x=-0.029986703768372536, y=0.048505447804927826, z=0.2540000081062317), orientation=geometry_msgs.msg.Quaternion(x=0.5433340444023868, y=-0.7999605990872498, z=0.0, w=0.25465890147668824)), vision_interfaces.msg.HandLandmark3D(name='PINKY_TIP', position=geometry_msgs.msg.Point(x=-0.034985024482011795, y=0.031729161739349365, z=0.1770000010728836), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0))], palm_pose=geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=0.0, y=0.0, z=0.0), orientation=geometry_msgs.msg.Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)))])
+
+d435i_docker_ros-image_point_to_3d-1  | [DEBUG] [1739580287.065096831] [hand_3d_tracking_node]: starting marker topic
+d435i_docker_ros-image_point_to_3d-1  | [DEBUG] [1739580287.065261732] [hand_3d_tracking_node]: self.display initiated
+d435i_docker_ros-image_point_to_3d-1  | [DEBUG] [1739580287.065436843] [hand_3d_tracking_node]: points_of_interest: ['WRIST', 'INDEX_FINGER_MCP', 'INDEX_FINGER_TIP', 'MIDDLE_FINGER_MCP', 'RING_FINGER_MCP', 'PINKY_MCP']
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.065592894] [hand_3d_tracking_node]: WRIST: (-9.164, 1.150, 13.432)
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.065742995] [hand_3d_tracking_node]: INDEX_FINGER_MCP: (-0.019, -0.039, 0.180)
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.065891396] [hand_3d_tracking_node]: INDEX_FINGER_TIP: (0.119, -0.082, 0.335)
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.066048167] [hand_3d_tracking_node]: MIDDLE_FINGER_MCP: (-1.266, -0.916, 12.455)
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.066196808] [hand_3d_tracking_node]: RING_FINGER_MCP: (-0.022, 0.014, 0.183)
+d435i_docker_ros-image_point_to_3d-1  | [INFO] [1739580287.066342209] [hand_3d_tracking_node]: PINKY_MCP: (-0.037, 0.052, 0.243)
+
+
+135/381 = 0.354330708661
+9.164/0.019 = 482.315789474
+Pixel Ratios:
+
+    The pixel coordinates are in the 2D image space, and their ratios reflect the relative positions of the joints in the image.
+
+    For example, if the wrist is at (135, 274) and the index finger MCP is at (381, 144), the ratio of their x-coordinates (135/381 ≈ 0.354) tells us that the wrist is about 35.4% of the way from the left edge of the image to the index finger MCP.
+
+3D Ratios:
+
+    The 3D coordinates are in the real-world space, and their ratios should reflect the relative positions of the joints in 3D.
+
+    If the wrist is at (-9.164, 1.150, 13.432) and the index finger MCP is at (-0.019, -0.039, 0.180), the ratio of their x-coordinates (-9.164/-0.019 ≈ 482.3) tells us that the wrist is about 482 times farther from the origin than the index finger MCP, which is physically impossible for a human hand.
+
 
 
 # To Test
@@ -214,10 +310,16 @@ ros2 topic list
 * To view the camera feed, you can use RViz2:
 ```bash
 source /opt/ros/humble/setup.bash
-ros2 run rviz2 rviz2
+cd workspace/workspace
+    ros2 run rviz2 rviz2
 
+source /opt/ros/humble/setup.bash
 cd workspace/workspace
 ros2 run rviz2 rviz2 -d d435i.rviz
+
+source /opt/ros/humble/setup.bash
+cd workspace/workspace
+ros2 run rviz2 rviz2 -d hand_marker_array.rviz
 ```
 
 may need to source if docker not updated: source /opt/ros/humble/setup.bash

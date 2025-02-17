@@ -132,14 +132,29 @@ class HandTrackingNode(Node):
         self.hand_detection_pub = self.create_publisher(
             HandDetection2D, "hand_detection_2d", 10
         )
+
+        # Add message counters
+        self.image_count = 0
+        self.publish_count = 0
+
+        self.create_timer(5.0, self.diagnostic_callback)
+
         # log node startup
         self.get_logger().info(
             f"HandTrackingNode initialized (visualization: {self.show_video})"
         )
 
+    def diagnostic_callback(self):
+        self.get_logger().info(
+            f"Stats:\n"
+            f"  raw images received: {self.image_count}\n"
+            f"  Published messages: {self.publish_count}"
+        )
+
     def image_callback(self, msg):
         try:
-            self.get_logger().info(f"runing new image_callback")
+            self.get_logger().debug(f"image_callback")
+            self.image_count += 1
             # Convert ROS Image message to OpenCV image
             color_frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
 
@@ -157,7 +172,7 @@ class HandTrackingNode(Node):
             self.hand_detection_pub.publish(detection_msg)
 
             if len(hand_results) > 0:
-                self.get_logger().info(
+                self.get_logger().debug(
                     f"Published HandDetection2D with {len(hand_results)} hands"
                 )
 
@@ -168,62 +183,10 @@ class HandTrackingNode(Node):
                 )
                 display_msg = self.bridge.cv2_to_imgmsg(annotated_frame, "bgr8")
                 self.display_pub.publish(display_msg)
+                self.publish_count += 1
 
         except Exception as e:
             self.get_logger().error(f"Error in image_callback: {str(e)}")
-
-    # def image_callback(self, msg):
-    #     try:
-    #         # Convert ROS Image message to OpenCV image
-    #         color_frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-
-    #         # Process frame and get hand landmarks
-    #         hand_results = self.tracking_service.process_frame(color_frame)
-
-    #         # Create HandDetection2D message
-    #         detection_msg = HandDetection2D()
-    #         detection_msg.header = msg.header  # Use original image timestamp
-    #         detection_msg.image_width = msg.width
-    #         detection_msg.image_height = msg.height
-
-    #         # Process each detected hand
-    #         # 1. Refactor service to Return Hand2D object
-    #         # 2. Wrap Hand2D object in HandDetection2D (the hand detection msg)
-    #         for hand_idx, hand in enumerate(hand_results):
-    #             hand_msg = Hand2D()
-    #             hand_msg.hand_id = f"hand_{hand_idx}"
-    #             hand_msg.handedness = hand.handedness  # Now using actual handedness
-
-    #             # Convert each landmark to 2D message format
-    #             for landmark_name, (x, y) in hand.landmark_points.items():
-    #                 landmark = HandLandmark2D()
-    #                 landmark.name = landmark_name
-    #                 landmark.pixel_x = int(x)
-    #                 landmark.pixel_y = int(y)
-    #                 hand_msg.landmarks.append(landmark)
-
-    #             detection_msg.hands.append(hand_msg)
-
-    #         # Publish the hand detection message
-    #         self.hand_detection_pub.publish(detection_msg)
-
-    #         if len(hand_results) > 0:
-    #             self.get_logger().info(
-    #                 f"Published object: HandDetection2D to topic: hand_detection_2d - with {len(hand_results)} hands"
-    #             )
-
-    #         self.get_logger().debug(f"HandDetection2D: {detection_msg}")
-
-    #         # Handle visualization if enabled
-    #         if self.show_video:
-    #             annotated_frame = self.tracking_service.draw_landmarks(
-    #                 color_frame, hand_results
-    #             )
-    #             display_msg = self.bridge.cv2_to_imgmsg(annotated_frame, "bgr8")
-    #             self.display_pub.publish(display_msg)
-
-    #     except Exception as e:
-    #         self.get_logger().error(f"Error in image_callback: {str(e)}")
 
 
 def main(args=None):

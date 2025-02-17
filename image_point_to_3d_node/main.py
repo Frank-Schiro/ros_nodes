@@ -8,6 +8,8 @@ from sensor_msgs.msg import PointCloud2
 import sensor_msgs_py.point_cloud2 as pc2
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
 
 from sensor_msgs.msg import CameraInfo, PointCloud2, Image
 from vision_interfaces.msg import (
@@ -53,10 +55,6 @@ class HandsService:
         self.image_width = 0
         self.image_height = 0
 
-    # Update this to return array of Hand3D instead of HandDetection3D
-    # Because HandDetection3D has ROS header which HandsService doesn't need to know about
-    # Build HandDetection3D in application
-    # How to define array of Hand3D?
     def hand_map(
         self, hands: List[Hand2D], image_width, image_height, cloud_msg: PointCloud2
     ) -> List[Hand3D]:
@@ -320,6 +318,28 @@ class ImagePointTo3D(Node):
             depth=1,
         )
 
+        # Get width and height from parameters
+        depth_profile = self.get_parameter_or(
+            "depth_module.depth_profile", "848x480x30"
+        ).value
+        color_profile = self.get_parameter_or(
+            "rgb_camera.color_profile", "848x480x30"
+        ).value
+
+        self.depth_width, self.depth_height, self.depth_fps = self.parse_profile(
+            depth_profile
+        )
+        self.color_width, self.color_height, self.color_fps = self.parse_profile(
+            color_profile
+        )
+
+        self.get_logger().info(
+            f"Depth Profile: {self.depth_width}x{self.depth_height} @ {self.depth_fps} FPS"
+        )
+        self.get_logger().info(
+            f"Color Profile: {self.color_width}x{self.color_height} @ {self.color_fps} FPS"
+        )
+
         self.hand_detection_sub = Subscriber(self, HandDetection2D, "hand_detection_2d")
         self.pointcloud_sub = Subscriber(
             self,
@@ -343,6 +363,7 @@ class ImagePointTo3D(Node):
         self.hand_detection_count = 0
         self.pointcloud_count = 0
         self.sync_callback_count = 0
+        self.publish_count = 0
 
         self.create_timer(5.0, self.diagnostic_callback)
 
@@ -358,14 +379,23 @@ class ImagePointTo3D(Node):
             qos_profile,
         )
 
+        # publish markers for visualization in rviz
+        self.marker_pub = self.create_publisher(MarkerArray, "hand_markers", 10)
+
         self.get_logger().info("Hand3DTrackingNode initialized")
+
+    def parse_profile(self, profile):
+        """Parse profile string like '848x480x30' into width, height, fps"""
+        parts = profile.lower().replace(" ", "").split("x")
+        return int(parts[0]), int(parts[1]), int(parts[2])
 
     def diagnostic_callback(self):
         self.get_logger().info(
-            f"Diagnostics:\n"
+            f"Stats:\n"
             f"  Hand detections received: {self.hand_detection_count}\n"
             f"  Pointclouds received: {self.pointcloud_count}\n"
-            f"  Synchronized callbacks: {self.sync_callback_count}"
+            f"  Synchronized callbacks: {self.sync_callback_count}\n"
+            f"  Published messages: {self.publish_count}"
         )
 
     def hand_detection_callback(self, msg):
@@ -392,7 +422,7 @@ class ImagePointTo3D(Node):
             self.get_logger().debug(
                 f"Received HandDetection2D message: {hand_detection_msg}"
             )
-            self.get_logger().debug(f"Received PointCloud message: {cloud_msg}")
+            self.get_logger().debug(f"Received PointCloud message")
 
             # parse input message
             hands = hand_detection_msg.hands
@@ -417,13 +447,193 @@ class ImagePointTo3D(Node):
             # publish output message
             if output_msg.hands:
                 self.hand_3d_pub.publish(output_msg)
+                self.publish_count += 1
                 self.get_logger().info(
                     f"Published HandDetection3D object to topic: 'hand_detection_3d' with {len(output_msg.hands)} hands"
                 )
                 self.get_logger().debug(f"HandDetection3D: {output_msg}")
 
+                self.get_logger().debug(f"starting marker topic")
+                if os.getenv("MARKERS", "false").lower() == "true":
+                    self.display(output_msg.hands)
+
         except Exception as e:
             self.get_logger().error(f"Error in sync callback: {str(e)}")
+
+    def display(self, hands_3d):
+        self.get_logger().debug(f"self.display initiated")
+        marker_array = MarkerArray()
+
+        for hand in hands_3d:
+            # Create a dictionary to store the positions of the joints
+            joint_positions = {}
+            for landmark in hand.landmarks:
+                joint_positions[landmark.name] = (
+                    landmark.position.x,
+                    landmark.position.y,
+                    landmark.position.z,
+                )
+
+            # Define the joints we are interested in
+            # points_of_interest = ["WRIST", "THUMB_TIP", "PINKY_TIP"]
+
+            points_of_interest = [
+                "WRIST",  # 0
+                # "THUMB_CMC",  # 1
+                # "THUMB_MCP",  # 2
+                # "THUMB_IP",  # 3
+                # "THUMB_TIP",  # 4
+                "INDEX_FINGER_MCP",  # 5
+                # "INDEX_FINGER_PIP",  # 6
+                # "INDEX_FINGER_DIP",  # 7
+                "INDEX_FINGER_TIP",  # 8
+                "MIDDLE_FINGER_MCP",  # 9
+                # "MIDDLE_FINGER_PIP",  # 10
+                # "MIDDLE_FINGER_DIP",  # 11
+                # "MIDDLE_FINGER_TIP",  # 12
+                "RING_FINGER_MCP",  # 13
+                # "RING_FINGER_PIP",  # 14
+                # "RING_FINGER_DIP",  # 15
+                # "RING_FINGER_TIP",  # 16
+                "PINKY_MCP",  # 17
+                # "PINKY_PIP",  # 18
+                # "PINKY_DIP",  # 19
+                # "PINKY_TIP",  # 20
+            ]
+
+            self.get_logger().debug(f"points_of_interest: {points_of_interest}")
+
+            # Log the coordinates for each point of interest
+            for joint_name in points_of_interest:
+                if joint_name in joint_positions:
+                    x, y, z = joint_positions[joint_name]
+                    self.get_logger().info(f"{joint_name}: ({x:.3f}, {y:.3f}, {z:.3f})")
+                else:
+                    self.get_logger().warn(f"{joint_name} not found in joint_positions")
+
+            # Create joint markers
+            for joint_name in points_of_interest:
+                if joint_name in joint_positions:
+                    x, y, z = joint_positions[joint_name]
+
+                    joint_marker = Marker()
+                    joint_marker.header.frame_id = "camera_link"
+                    joint_marker.header.stamp = self.get_clock().now().to_msg()
+                    joint_marker.ns = "hand_joints"
+                    joint_marker.id = points_of_interest.index(joint_name)
+                    joint_marker.type = Marker.SPHERE
+                    joint_marker.action = Marker.ADD
+                    joint_marker.pose.position.x = x
+                    joint_marker.pose.position.y = y
+                    joint_marker.pose.position.z = z
+                    joint_marker.scale.x = 0.015
+                    joint_marker.scale.y = 0.015
+                    joint_marker.scale.z = 0.015
+                    joint_marker.color.a = 1.0
+                    joint_marker.color.r = 1.0  # Red for joints
+                    joint_marker.color.g = 0.0
+                    joint_marker.color.b = 0.0
+                    marker_array.markers.append(joint_marker)
+
+                    # Create label marker (text)
+                    label_marker = Marker()
+                    label_marker.header.frame_id = "camera_link"
+                    label_marker.header.stamp = self.get_clock().now().to_msg()
+                    label_marker.ns = "hand_labels"
+                    label_marker.id = (
+                        points_of_interest.index(joint_name) + 1000
+                    )  # Unique ID for labels
+                    label_marker.type = Marker.TEXT_VIEW_FACING
+                    label_marker.action = Marker.ADD
+                    label_marker.pose.position.x = x
+                    label_marker.pose.position.y = y
+                    label_marker.pose.position.z = (
+                        z + 0.005
+                    )  # Reduced offset from 0.02 to 0.005
+                    label_marker.scale.z = 0.005  # Reduced text size from 0.02 to 0.005
+                    label_marker.color.a = 1.0
+                    label_marker.color.r = 1.0
+                    label_marker.color.g = 1.0
+                    label_marker.color.b = 1.0
+                    # Simplified label text - removed coordinates to reduce clutter
+                    # label_marker.text = f"{joint_name}"
+                    label_marker.text = f"{joint_name} ({x:.2f}, {y:.2f})"  # Label text with coordinates
+                    marker_array.markers.append(label_marker)
+
+            # Create connection markers
+            # connections = [
+            #     ("WRIST", "THUMB_TIP"),
+            #     ("WRIST", "PINKY_TIP")
+            # ]
+
+            connections = [
+                # Thumb connections (0-4)
+                # ("WRIST", "THUMB_CMC"),  # 0-1
+                # ("THUMB_CMC", "THUMB_MCP"),  # 1-2
+                # ("THUMB_MCP", "THUMB_IP"),  # 2-3
+                # ("THUMB_IP", "THUMB_TIP"),  # 3-4
+                # Index finger connections (0,5-8)
+                ("WRIST", "INDEX_FINGER_MCP"),  # 0-5
+                ("INDEX_FINGER_MCP", "INDEX_FINGER_TIP"),  # special
+                # ("INDEX_FINGER_MCP", "INDEX_FINGER_PIP"),  # 5-6
+                # ("INDEX_FINGER_PIP", "INDEX_FINGER_DIP"),  # 6-7
+                # ("INDEX_FINGER_DIP", "INDEX_FINGER_TIP"),  # 7-8
+                # Middle finger connections (0,9-12)
+                # ("WRIST", "MIDDLE_FINGER_MCP"),  # 0-9
+                # ("MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP"),  # 9-10
+                # ("MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP"),  # 10-11
+                # ("MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP"),  # 11-12
+                # Ring finger connections (0,13-16)
+                # ("WRIST", "RING_FINGER_MCP"),  # 0-13
+                # ("RING_FINGER_MCP", "RING_FINGER_PIP"),  # 13-14
+                # ("RING_FINGER_PIP", "RING_FINGER_DIP"),  # 14-15
+                # ("RING_FINGER_DIP", "RING_FINGER_TIP"),  # 15-16
+                # Pinky finger connections (0,17-20)
+                ("WRIST", "PINKY_MCP"),  # 0-17
+                # ("PINKY_MCP", "PINKY_PIP"),  # 17-18
+                # ("PINKY_PIP", "PINKY_DIP"),  # 18-19
+                # ("PINKY_DIP", "PINKY_TIP"),  # 19-20
+                # Palm connections (across finger MCPs)
+                ("INDEX_FINGER_MCP", "MIDDLE_FINGER_MCP"),  # 5-9
+                ("MIDDLE_FINGER_MCP", "RING_FINGER_MCP"),  # 9-13
+                ("RING_FINGER_MCP", "PINKY_MCP"),  # 13-17
+            ]
+
+            self.get_logger().debug(f"connections: {connections}")
+
+            for connection in connections:
+                start_joint, end_joint = connection
+                if start_joint in joint_positions and end_joint in joint_positions:
+                    line_marker = Marker()
+                    line_marker.header.frame_id = "camera_link"
+                    line_marker.header.stamp = self.get_clock().now().to_msg()
+                    line_marker.ns = "hand_connections"
+                    line_marker.id = connections.index(connection)
+                    line_marker.type = Marker.LINE_STRIP
+                    line_marker.action = Marker.ADD
+                    line_marker.scale.x = 0.005
+                    line_marker.color.a = 1.0
+                    line_marker.color.r = 0.0
+                    line_marker.color.g = 1.0  # Green for connections
+                    line_marker.color.b = 0.0
+
+                    start_point = Point()
+                    start_point.x = joint_positions[start_joint][0]
+                    start_point.y = joint_positions[start_joint][1]
+                    start_point.z = joint_positions[start_joint][2]
+
+                    end_point = Point()
+                    end_point.x = joint_positions[end_joint][0]
+                    end_point.y = joint_positions[end_joint][1]
+                    end_point.z = joint_positions[end_joint][2]
+
+                    line_marker.points.append(start_point)
+                    line_marker.points.append(end_point)
+
+                    marker_array.markers.append(line_marker)
+
+        self.get_logger().debug(f"Publishing {len(marker_array.markers)} markers")
+        self.marker_pub.publish(marker_array)
 
 
 def main(args=None):

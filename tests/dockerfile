@@ -1,0 +1,90 @@
+FROM ros:humble-perception
+
+# Install test dependencies
+RUN apt-get update && apt-get install -y \
+    python3-pytest \
+    python3-opencv \
+    python3-pip \
+    ros-humble-cv-bridge \
+    python3-pytest-cov \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# Install pytest explicitly using pip to ensure it's in PATH
+RUN pip install pytest pytest-cov
+
+
+RUN echo "==========================================" && \
+    echo "=== Testing pytest ===" && \
+    echo "==========================================" && \
+    python3 -u -m pytest --version
+
+
+# Point Python path to include our packages
+ENV PYTHONPATH="/app:/app/vision_interfaces/install/lib/python3.10/site-packages:${PYTHONPATH}"
+
+
+
+WORKDIR /app
+
+RUN echo "uncached 1"
+
+RUN echo "==========================================" && \
+    echo "=== Testing pytest ===" && \
+    echo "==========================================" && \
+    ls
+
+# Copy and build vision_interfaces first
+COPY vision_interfaces/ vision_interfaces/
+
+RUN ls 
+
+WORKDIR /app/vision_interfaces
+
+RUN ls 
+
+RUN . /opt/ros/humble/setup.sh && \
+    colcon build
+
+# Copy rest of the project
+WORKDIR /app
+COPY . .
+
+
+RUN echo "After COPY, content of test file:" && \
+    cat ./tests/integration/test_realsense_depth.py
+
+
+# Point Python path to include our packages
+ENV PYTHONPATH="/app:${PYTHONPATH}"
+
+
+
+# Copy entrypoint script
+COPY tests/entrypoint.sh /entrypoint.sh
+
+RUN echo "==========================================" && \
+    echo "=== Dockerfile Context ===" && \
+    echo "==========================================" && \
+    ls
+
+
+RUN echo "==========================================" && \
+    echo "=== ls /opt/ros/humble/ ===" && \
+    echo "==========================================" && \
+    ls /opt/ros/humble/ 
+
+RUN echo "==========================================" && \
+    echo "=== ls /app/vision_interfaces/install/ ===" && \
+    echo "==========================================" && \
+    ls /app/vision_interfaces/install/
+
+
+RUN echo "==========================================" && \
+    echo "=== ls /tests ===" && \
+    echo "==========================================" && \
+    ls ./tests
+
+RUN chmod +x ./tests/entrypoint.sh
+# ENTRYPOINT ["./tests/entrypoint.sh"]  
+ENTRYPOINT ["/app/tests/entrypoint.sh"]

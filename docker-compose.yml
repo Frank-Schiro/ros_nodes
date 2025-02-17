@@ -69,6 +69,7 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - SHOW_VIDEO=true
+      - DEBUG=false
     build:
       context: .
       dockerfile: hand_tracking_node/Dockerfile
@@ -83,6 +84,7 @@ services:
     environment:
       - ROS_DOMAIN_ID=42
       - SHOW_VIDEO=true
+      - MARKERS=true # publish markers to view 3D results in RVIZ
       - DEBUG=false
       - ROS_LOG_LEVEL=info
     build:

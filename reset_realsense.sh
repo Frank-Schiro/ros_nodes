@@ -47,10 +47,23 @@ VENDOR_PRODUCT=$(echo $REALSENSE_INFO | grep -o '[0-9a-f]\{4\}:[0-9a-f]\{4\}')
 log "Found RealSense camera at Bus $BUS Device $DEVICE (ID $VENDOR_PRODUCT)"
 
 # Stop Docker containers using the camera
-if command_exists docker; then
+# if command_exists docker; then
+#     log "Stopping Docker containers..."
+#     docker compose down 2>/dev/null || true
+# fi
+
+# If docker compose down takes more than a minute, restart Docker service
+if command -v docker >/dev/null; then
     log "Stopping Docker containers..."
-    docker compose down 2>/dev/null || true
+    
+    timeout 60s docker compose down 2>/dev/null
+    if [ $? -eq 124 ]; then
+        log "Docker compose down took too long, resetting Docker..."
+        sudo systemctl reset-failed docker
+        sudo systemctl restart docker
+    fi
 fi
+
 
 # Reset the camera
 log "Resetting RealSense camera..."
@@ -113,4 +126,19 @@ if lsusb | grep -q "RealSense"; then
     log "Camera reconnected successfully"
 else
     log "Warning: Cannot verify if camera reconnected. You may need to wait a few more seconds."
+fi
+
+
+# Setup X11 permissions if needed
+if command_exists xhost; then
+    if [ -n "$DISPLAY" ]; then
+        log "Setting up X11 permissions..."
+        xhost +local:root >/dev/null 2>&1 && \
+            log "X11 permissions updated successfully" || \
+            log "Warning: Failed to set X11 permissions"
+    else
+        debug "No X display found, skipping X11 permission setup"
+    fi
+else
+    debug "xhost command not found, skipping X11 permission setup"
 fi
