@@ -163,6 +163,8 @@ class HandTrackingNode(Node):
 
             # Create HandDetection2D message
             detection_msg = HandDetection2D()
+            # The incoming image message /camera/camera/color/image_raw will have a header with frame_id set to camera_color_optical_frame (the realsense camera's color optical frame)
+            # Your HandDetection2D message contains 2D pixel coordinates that are in the image plane, which means they are inherently in the same frame as the color camera optical frame
             detection_msg.header = msg.header
             detection_msg.image_width = msg.width
             detection_msg.image_height = msg.height

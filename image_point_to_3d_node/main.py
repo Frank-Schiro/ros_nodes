@@ -10,7 +10,6 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
-
 from sensor_msgs.msg import CameraInfo, PointCloud2, Image
 from vision_interfaces.msg import (
     HandDetection2D,
@@ -21,6 +20,7 @@ from vision_interfaces.msg import (
 )
 import transforms3d as t3d
 import os
+import cv2
 
 # Define joint relationships (which points to use for orientation)
 joint_connections = {
@@ -54,6 +54,16 @@ class HandsService:
         self.node = node
         self.image_width = 0
         self.image_height = 0
+        # Matrix dimensions for hand joints (21 joints x 3 coordinates)
+        self.matrix_shape = (21, 3)  # [num_joints, (x,y,z)]
+
+        # Initialize Kalman filter
+        flattened_dim = np.prod(self.matrix_shape)  # 21 * 3 = 63
+        self.kalman = cv2.KalmanFilter(flattened_dim, flattened_dim)
+        self.kalman.measurementMatrix = np.eye(flattened_dim, dtype=np.float32)
+        self.kalman.transitionMatrix = np.eye(flattened_dim, dtype=np.float32)
+        self.kalman.processNoiseCov = np.eye(flattened_dim, dtype=np.float32) * 0.03
+        self.kalman.measurementNoiseCov = np.eye(flattened_dim, dtype=np.float32) * 0.1
 
     def hand_map(
         self, hands: List[Hand2D], image_width, image_height, cloud_msg: PointCloud2
@@ -95,6 +105,28 @@ class HandsService:
 
                 hand_3d.landmarks.append(landmark_3d)
 
+        # Create and filter joint matrix
+        joint_matrix = np.zeros(self.matrix_shape)
+        for i, landmark in enumerate(hand_3d.landmarks):
+            joint_matrix[i] = [
+                landmark.position.x,
+                landmark.position.y,
+                landmark.position.z,
+            ]
+
+        # Flatten, filter, and reshape
+        flattened = joint_matrix.flatten()
+        prediction = self.kalman.predict()
+        filtered_flat = self.kalman.correct(flattened.astype(np.float32))
+        filtered_matrix = filtered_flat.reshape(self.matrix_shape)
+
+        # Update landmark positions with filtered values
+        for i, landmark in enumerate(hand_3d.landmarks):
+            landmark.position.x = float(filtered_matrix[i][0])
+            landmark.position.y = float(filtered_matrix[i][1])
+            landmark.position.z = float(filtered_matrix[i][2])
+
+        # Calculate orientations for each joint
         landmark_with_3d = [landmark.name for landmark in hand_3d.landmarks]
         for landmark in hand_3d.landmarks:
             # Special case, use camera to or wrist to palm center
@@ -160,6 +192,7 @@ class HandsService:
                         landmark.orientation.x = float(frame_quat[1])
                         landmark.orientation.y = float(frame_quat[2])
                         landmark.orientation.z = float(frame_quat[3])
+
         return hand_3d
 
     def get_wrist_quaternion(self, wrist_position: np.ndarray) -> np.ndarray:
@@ -239,13 +272,17 @@ class HandsService:
         So we need the image the initial points came from.
         """
         try:
+            # Extract the width and height from the PointCloud2 message
+            cloud_width = point_cloud.width
+            cloud_height = point_cloud.height
+            # points.shape = (407040, 3) where 407040 = 848 * 480
+            # Read the points as a numpy array and reshape using the intrinsic width and height
             points = pc2.read_points_numpy(
                 point_cloud, field_names=["x", "y", "z"], skip_nans=False
-            ).reshape(self.image_height, self.image_width, 3)
+            ).reshape(cloud_height, cloud_width, 3)
 
-            # Transform to [0, 1]
-            pixel_x = min(pixel_x, self.image_width - 1)
-            pixel_y = min(pixel_y, self.image_height - 1)
+            pixel_x = min(pixel_x, cloud_width - 1)
+            pixel_y = min(pixel_y, cloud_height - 1)
 
             point = points[pixel_y, pixel_x]
             return tuple(point)
@@ -321,10 +358,8 @@ class ImagePointTo3D(Node):
         # Get width and height from parameters
         depth_profile = self.get_parameter_or(
             "depth_module.depth_profile", "848x480x30"
-        ).value
-        color_profile = self.get_parameter_or(
-            "rgb_camera.color_profile", "848x480x30"
-        ).value
+        )
+        color_profile = self.get_parameter_or("rgb_camera.color_profile", "848x480x30")
 
         self.depth_width, self.depth_height, self.depth_fps = self.parse_profile(
             depth_profile
@@ -424,6 +459,61 @@ class ImagePointTo3D(Node):
             )
             self.get_logger().debug(f"Received PointCloud message")
 
+            # ================================================== #
+            # Debug Loop - Print a line to verify point cloud to 3d conversion
+            # ================================================== #
+            # Add test code here before processing hands
+            # Test middle row only
+            middle_row = cloud_msg.height // 2  # Half of 480 = 240
+            marker_array = MarkerArray()
+
+            # Get point cloud data
+            points = pc2.read_points_numpy(
+                cloud_msg, field_names=["x", "y", "z"], skip_nans=False
+            ).reshape(cloud_msg.height, cloud_msg.width, 3)
+
+            # Sample points across the width
+            for x in range(
+                0, cloud_msg.width, 20
+            ):  # Step by 20 to avoid too many markers
+                point = points[middle_row, x]
+
+                # Create marker for this point
+                marker = Marker()
+                # marker.header.frame_id = "camera_link" # When in camera_link, the coordinate axes were wrong
+                marker.header.frame_id = cloud_msg.header.frame_id
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = "test_row"
+                marker.id = x
+                marker.type = Marker.SPHERE
+                marker.action = Marker.ADD
+                # The original version, the red line completly off the point cloud
+                marker.pose.position.x = float(point[0])
+                marker.pose.position.y = float(point[1])
+                marker.pose.position.z = float(point[2])
+
+                # Try 1: Negate y (WORKING!)
+                # marker.pose.position.x = float(point[2])
+                # marker.pose.position.y = -float(point[0])
+                # marker.pose.position.z = float(point[1])
+
+                marker.scale.x = 0.01
+                marker.scale.y = 0.01
+                marker.scale.z = 0.01
+                marker.color.a = 1.0
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+
+                marker_array.markers.append(marker)
+
+            # Publish test markers
+            self.marker_pub.publish(marker_array)
+
+            # ================================================== #
+            # Debug Loop - end
+            # ================================================== #
+
             # parse input message
             hands = hand_detection_msg.hands
             image_width = hand_detection_msg.image_width
@@ -441,9 +531,77 @@ class ImagePointTo3D(Node):
             )
 
             # output message header
-            output_msg.header = hand_detection_msg.header
-            output_msg.header.frame_id = "camera_link"
+            # output_msg.header = hand_detection_msg.header
+            output_msg.header = cloud_msg.header
+            output_msg.header.frame_id = cloud_msg.header.frame_id
 
+            # ================================================== #
+            # Debug Loop - Print all finger points
+            # ================================================== #
+            for hand_idx, (hand_2d, hand_3d) in enumerate(zip(hands, output_msg.hands)):
+                self.get_logger().info(f"\n=== Hand {hand_idx} Finger Points ===")
+
+                # Get all 2D and 3D points
+                points_2d = {
+                    landmark.name: (landmark.pixel_x, landmark.pixel_y)
+                    for landmark in hand_2d.landmarks
+                }
+
+                points_3d = {
+                    landmark.name: (
+                        landmark.position.x,
+                        landmark.position.y,
+                        landmark.position.z,
+                    )
+                    for landmark in hand_3d.landmarks
+                }
+
+                # Define finger groups and their points in order
+                finger_groups = {
+                    "Thumb": ["THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP"],
+                    "Index": [
+                        "INDEX_FINGER_MCP",
+                        "INDEX_FINGER_PIP",
+                        "INDEX_FINGER_DIP",
+                        "INDEX_FINGER_TIP",
+                    ],
+                    "Middle": [
+                        "MIDDLE_FINGER_MCP",
+                        "MIDDLE_FINGER_PIP",
+                        "MIDDLE_FINGER_DIP",
+                        "MIDDLE_FINGER_TIP",
+                    ],
+                    "Ring": [
+                        "RING_FINGER_MCP",
+                        "RING_FINGER_PIP",
+                        "RING_FINGER_DIP",
+                        "RING_FINGER_TIP",
+                    ],
+                    "Pinky": ["PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP"],
+                }
+
+                # Print wrist point first
+                if "WRIST" in points_2d and "WRIST" in points_3d:
+                    px, py = points_2d["WRIST"]
+                    x, y, z = points_3d["WRIST"]
+                    self.get_logger().info(
+                        f"\nWRIST: [{px}, {py}], [{x:.3f}, {y:.3f}, {z:.3f}]"
+                    )
+
+                # Print each finger group
+                for finger_name, points in finger_groups.items():
+                    self.get_logger().info(f"\n{finger_name} Finger:")
+                    for point_name in points:
+                        if point_name in points_2d and point_name in points_3d:
+                            px, py = points_2d[point_name]
+                            x, y, z = points_3d[point_name]
+                            self.get_logger().info(
+                                f"{point_name}: [{px}, {py}], [{x:.3f}, {y:.3f}, {z:.3f}]"
+                            )
+
+            # ================================================== #
+            # Debug Loop End
+            # ================================================== #
             # publish output message
             if output_msg.hands:
                 self.hand_3d_pub.publish(output_msg)
@@ -479,26 +637,26 @@ class ImagePointTo3D(Node):
 
             points_of_interest = [
                 "WRIST",  # 0
-                # "THUMB_CMC",  # 1
-                # "THUMB_MCP",  # 2
-                # "THUMB_IP",  # 3
-                # "THUMB_TIP",  # 4
+                "THUMB_CMC",  # 1
+                "THUMB_MCP",  # 2
+                "THUMB_IP",  # 3
+                "THUMB_TIP",  # 4
                 "INDEX_FINGER_MCP",  # 5
-                # "INDEX_FINGER_PIP",  # 6
-                # "INDEX_FINGER_DIP",  # 7
+                "INDEX_FINGER_PIP",  # 6
+                "INDEX_FINGER_DIP",  # 7
                 "INDEX_FINGER_TIP",  # 8
                 "MIDDLE_FINGER_MCP",  # 9
-                # "MIDDLE_FINGER_PIP",  # 10
-                # "MIDDLE_FINGER_DIP",  # 11
-                # "MIDDLE_FINGER_TIP",  # 12
+                "MIDDLE_FINGER_PIP",  # 10
+                "MIDDLE_FINGER_DIP",  # 11
+                "MIDDLE_FINGER_TIP",  # 12
                 "RING_FINGER_MCP",  # 13
-                # "RING_FINGER_PIP",  # 14
-                # "RING_FINGER_DIP",  # 15
-                # "RING_FINGER_TIP",  # 16
+                "RING_FINGER_PIP",  # 14
+                "RING_FINGER_DIP",  # 15
+                "RING_FINGER_TIP",  # 16
                 "PINKY_MCP",  # 17
-                # "PINKY_PIP",  # 18
-                # "PINKY_DIP",  # 19
-                # "PINKY_TIP",  # 20
+                "PINKY_PIP",  # 18
+                "PINKY_DIP",  # 19
+                "PINKY_TIP",  # 20
             ]
 
             self.get_logger().debug(f"points_of_interest: {points_of_interest}")
@@ -517,7 +675,7 @@ class ImagePointTo3D(Node):
                     x, y, z = joint_positions[joint_name]
 
                     joint_marker = Marker()
-                    joint_marker.header.frame_id = "camera_link"
+                    joint_marker.header.frame_id = "camera_depth_optical_frame"
                     joint_marker.header.stamp = self.get_clock().now().to_msg()
                     joint_marker.ns = "hand_joints"
                     joint_marker.id = points_of_interest.index(joint_name)
@@ -535,64 +693,64 @@ class ImagePointTo3D(Node):
                     joint_marker.color.b = 0.0
                     marker_array.markers.append(joint_marker)
 
-                    # Create label marker (text)
-                    label_marker = Marker()
-                    label_marker.header.frame_id = "camera_link"
-                    label_marker.header.stamp = self.get_clock().now().to_msg()
-                    label_marker.ns = "hand_labels"
-                    label_marker.id = (
-                        points_of_interest.index(joint_name) + 1000
-                    )  # Unique ID for labels
-                    label_marker.type = Marker.TEXT_VIEW_FACING
-                    label_marker.action = Marker.ADD
-                    label_marker.pose.position.x = x
-                    label_marker.pose.position.y = y
-                    label_marker.pose.position.z = (
-                        z + 0.005
-                    )  # Reduced offset from 0.02 to 0.005
-                    label_marker.scale.z = 0.005  # Reduced text size from 0.02 to 0.005
-                    label_marker.color.a = 1.0
-                    label_marker.color.r = 1.0
-                    label_marker.color.g = 1.0
-                    label_marker.color.b = 1.0
-                    # Simplified label text - removed coordinates to reduce clutter
-                    # label_marker.text = f"{joint_name}"
-                    label_marker.text = f"{joint_name} ({x:.2f}, {y:.2f})"  # Label text with coordinates
-                    marker_array.markers.append(label_marker)
-
-            # Create connection markers
-            # connections = [
-            #     ("WRIST", "THUMB_TIP"),
-            #     ("WRIST", "PINKY_TIP")
-            # ]
+                    # Create label marker (text) only for the tips of each finger
+                    if joint_name in [
+                        "THUMB_TIP",
+                        "INDEX_FINGER_TIP",
+                        "MIDDLE_FINGER_TIP",
+                        "RING_FINGER_TIP",
+                        "PINKY_TIP",
+                        "WRIST",
+                    ]:
+                        label_marker = Marker()
+                        label_marker.header.frame_id = "camera_depth_optical_frame"
+                        label_marker.header.stamp = self.get_clock().now().to_msg()
+                        label_marker.ns = "hand_labels"
+                        label_marker.id = (
+                            points_of_interest.index(joint_name) + 1000
+                        )  # Unique ID for labels
+                        label_marker.type = Marker.TEXT_VIEW_FACING
+                        label_marker.action = Marker.ADD
+                        label_marker.pose.position.x = x
+                        label_marker.pose.position.y = y
+                        label_marker.pose.position.z = (
+                            z + 0.02
+                        )  # Adjust the offset for better visibility
+                        label_marker.scale.z = 0.01  # Adjust text size
+                        label_marker.color.a = 1.0
+                        label_marker.color.r = 1.0
+                        label_marker.color.g = 1.0
+                        label_marker.color.b = 1.0
+                        label_marker.text = joint_name  # Simplified label text
+                        marker_array.markers.append(label_marker)
 
             connections = [
                 # Thumb connections (0-4)
-                # ("WRIST", "THUMB_CMC"),  # 0-1
-                # ("THUMB_CMC", "THUMB_MCP"),  # 1-2
-                # ("THUMB_MCP", "THUMB_IP"),  # 2-3
-                # ("THUMB_IP", "THUMB_TIP"),  # 3-4
+                ("WRIST", "THUMB_CMC"),  # 0-1
+                ("THUMB_CMC", "THUMB_MCP"),  # 1-2
+                ("THUMB_MCP", "THUMB_IP"),  # 2-3
+                ("THUMB_IP", "THUMB_TIP"),  # 3-4
                 # Index finger connections (0,5-8)
                 ("WRIST", "INDEX_FINGER_MCP"),  # 0-5
-                ("INDEX_FINGER_MCP", "INDEX_FINGER_TIP"),  # special
-                # ("INDEX_FINGER_MCP", "INDEX_FINGER_PIP"),  # 5-6
-                # ("INDEX_FINGER_PIP", "INDEX_FINGER_DIP"),  # 6-7
-                # ("INDEX_FINGER_DIP", "INDEX_FINGER_TIP"),  # 7-8
+                # ("INDEX_FINGER_MCP", "INDEX_FINGER_TIP"),  # special
+                ("INDEX_FINGER_MCP", "INDEX_FINGER_PIP"),  # 5-6
+                ("INDEX_FINGER_PIP", "INDEX_FINGER_DIP"),  # 6-7
+                ("INDEX_FINGER_DIP", "INDEX_FINGER_TIP"),  # 7-8
                 # Middle finger connections (0,9-12)
-                # ("WRIST", "MIDDLE_FINGER_MCP"),  # 0-9
-                # ("MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP"),  # 9-10
-                # ("MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP"),  # 10-11
-                # ("MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP"),  # 11-12
+                ("WRIST", "MIDDLE_FINGER_MCP"),  # 0-9
+                ("MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP"),  # 9-10
+                ("MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP"),  # 10-11
+                ("MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP"),  # 11-12
                 # Ring finger connections (0,13-16)
-                # ("WRIST", "RING_FINGER_MCP"),  # 0-13
-                # ("RING_FINGER_MCP", "RING_FINGER_PIP"),  # 13-14
-                # ("RING_FINGER_PIP", "RING_FINGER_DIP"),  # 14-15
-                # ("RING_FINGER_DIP", "RING_FINGER_TIP"),  # 15-16
+                ("WRIST", "RING_FINGER_MCP"),  # 0-13
+                ("RING_FINGER_MCP", "RING_FINGER_PIP"),  # 13-14
+                ("RING_FINGER_PIP", "RING_FINGER_DIP"),  # 14-15
+                ("RING_FINGER_DIP", "RING_FINGER_TIP"),  # 15-16
                 # Pinky finger connections (0,17-20)
                 ("WRIST", "PINKY_MCP"),  # 0-17
-                # ("PINKY_MCP", "PINKY_PIP"),  # 17-18
-                # ("PINKY_PIP", "PINKY_DIP"),  # 18-19
-                # ("PINKY_DIP", "PINKY_TIP"),  # 19-20
+                ("PINKY_MCP", "PINKY_PIP"),  # 17-18
+                ("PINKY_PIP", "PINKY_DIP"),  # 18-19
+                ("PINKY_DIP", "PINKY_TIP"),  # 19-20
                 # Palm connections (across finger MCPs)
                 ("INDEX_FINGER_MCP", "MIDDLE_FINGER_MCP"),  # 5-9
                 ("MIDDLE_FINGER_MCP", "RING_FINGER_MCP"),  # 9-13
@@ -605,7 +763,7 @@ class ImagePointTo3D(Node):
                 start_joint, end_joint = connection
                 if start_joint in joint_positions and end_joint in joint_positions:
                     line_marker = Marker()
-                    line_marker.header.frame_id = "camera_link"
+                    line_marker.header.frame_id = "camera_depth_optical_frame"
                     line_marker.header.stamp = self.get_clock().now().to_msg()
                     line_marker.ns = "hand_connections"
                     line_marker.id = connections.index(connection)
